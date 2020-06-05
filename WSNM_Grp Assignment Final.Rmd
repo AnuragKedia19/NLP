@@ -1,0 +1,531 @@
+---
+title: "Group Assignment of Web & Social Media (Shark Tank Companies.csv)"
+author: "Divya Thomas,Neha Tiwary, Saurav Suman, Anurag Kedia, Peehu (Group 8)"
+output: html_notebook
+---
+
+## Problem Statement - 
+
+Group Assignment: Business Intelligence Using Text Mining
+
+1.	A dataset of Shark Tank episodes is made available. It contains 495 entrepreneurs making their pitch to the VC sharks. 
+2.	You will ONLY use "Description" column for the initial text mining exercise.
+3.	Step 1:
+  a.	Extract the text into text corpus and perform following operations:
+  
+   i.	Create DTM
+    
+   ii.	Use "Deal" as a Dependent Variable
+    
+   iii.	Use CART model and arrive at your CART diagram
+    
+   iv.	Build Logistic Regression Model and find out your accuracy of the model
+    
+   v.	Build randomForst model and arrive at your varImpPlot
+4.	Step 2:
+  a.	Now, add a variable to you analysis called as "ratio". This variable is "askedfor/valuation". (This variable is to be added as a column to your dataframe in Step 1.)
+  b.	Rebuild "New" models- CART, randomForest and Logistic Regression
+5.	Deliverables: (in a word document)
+  a.	CART Tree (Before and After) (5 Marks)
+  b.	RandomForest plot (Before and After) (5 Marks)
+  c.	Confusion Matrix of Logistic Regression (Before and After) (5 Marks)
+  d.	(Most important)- Your interpretation in plain simple English not extending more than half a page. (15 Marks)
+
+## Solution - 
+
+#### Read the CSV file
+```{r}
+
+shark= read.csv(file = file.choose(), stringsAsFactors=FALSE)
+table(shark$deal)
+```
+#### Load the Libraries required for TEXT Analysis
+```{r}
+library(tm)
+library(SnowballC)
+library(wordcloud)
+```
+After loading the dataset, we need to change the dataset into a corpus(bag of words) with a variable name discription. After that few basic steps are required for the cleaning process and normalising the data. Those steps are mentioned below
+
+#### Building the Corpus
+```{r}
+# Create corpus
+corpus_shark = Corpus(VectorSource(shark$description))
+
+# Word Cloud for Corpus
+wordcloud(corpus_shark,colors=rainbow(7),max.words=100,scale=c(2, 1), random.order=FALSE, rot.per=0.25)
+
+# Convert to lower-case
+corpus_shark = tm_map(corpus_shark, tolower)
+
+# Remove punctuation
+corpus_shark = tm_map(corpus_shark, removePunctuation)
+
+```
+Here, we have not not dropped the stop words. So we can see words like "and", "the", "their" etc in the word cloud. We are removing the stop words from the document in further steps
+
+#### Word cloud after removing stop words
+```{r}
+# Remove stopwords, the, and
+corpus_shark = tm_map(corpus_shark, removeWords, c("the", "and", stopwords("english")))
+
+# Remove extra whitespaces if any
+corpus_shark = tm_map(corpus_shark, stripWhitespace)
+
+# Stem document 
+corpus_shark = tm_map(corpus_shark, stemDocument)
+
+
+# Word cloud after removing stopwords and cleaning
+wordcloud(corpus_shark,colors=rainbow(7),max.words=100,scale=c(2, 1), random.order=FALSE, rot.per=0.25)
+```
+For further analysis of text, we have to use DTM(Document-Term Matrix). In text mining, it is important to create the document-term matrix (DTM) of the corpus we are interested in. A DTM is basically a matrix, with documents designated by rows and words by columns, that the elements are the counts or the weights (usually by tf-idf). Subsequent analysis is usually based creatively on DTM. This will help us identify unique words in the corpus used frequently.
+
+#### Create the Document Term Matrix (DTM)
+```{r}
+shark.frequencies = DocumentTermMatrix(corpus_shark)
+shark.frequencies
+```
+
+#### Remove the sparse terms
+```{r}
+sparse_shark = removeSparseTerms(shark.frequencies, 0.995)
+```
+We are removing here less frequent words with sparsity less than 0.995
+
+#### Build the DataFrame of the DTM
+```{r}
+# Convert to a data frame
+shark_sparse = as.data.frame(as.matrix(sparse_shark))
+
+# Make all variable names R-friendly
+colnames(shark_sparse) = make.names(colnames(shark_sparse))
+
+# Add dependent variable
+shark_sparse$deal = shark$deal
+
+#Total number of deal
+table(shark_sparse$deal)
+
+```
+
+## Model Building
+We will use 3 different models and check its accuracy n performance as per the question to predict whether investors will invest in the businesses or not. Deal will be the dependant variable.
+
+#### Build CART Model
+```{r}
+# Load the Libraries
+library(rpart)
+library(rpart.plot)
+
+shark_CART = rpart(deal ~ ., data=shark_sparse, method="class")
+
+#CART Diagram
+prp(shark_CART, extra=2)
+```
+
+#### Predict and Evaluate the Performance of CART
+
+```{r}
+Predict_CART = predict(shark_CART, data=shark_sparse, type="class")
+
+CART_initial <- table(shark_sparse$deal, Predict_CART)
+
+# Baseline accuracy
+BaseAcc_CART = sum(diag(CART_initial))/sum(CART_initial)
+BaseAcc_CART
+```
+
+#### Build Random Forest Model
+```{r}
+# Load Library
+library(randomForest)
+
+set.seed(123)
+
+shark_RF = randomForest(deal ~ ., data=shark_sparse)
+shark_RF
+
+```
+
+#### Predict and Evaluate the Performance of Random Forest
+```{r}
+# Make predictions:
+Predict_RF = predict(shark_RF, data=shark_sparse)
+
+# Evaluate the performance: 
+RF_Initial <- table(shark_sparse$deal, Predict_RF>0.5)
+
+# Baseline accuracy:
+BaseAcc_RF = sum(diag(RF_Initial))/sum(RF_Initial)
+BaseAcc_RF
+```
+
+#### Variable Importance of Random Forest
+```{r}
+#Variable importance: 
+varImpPlot(shark_RF,main='Variable Importance Plot: Shark Tank',type=2)
+```
+We observer from the above varibale Importance plot that children,roll,make,design,shape,made,altern,like,packages are the top variables which are important and significant for the deal and model building.
+
+#### Build Logistic Regression Model
+```{r}
+set.seed(123)
+
+shark_logistic = glm(deal~., data = shark_sparse)
+```
+
+#### Predict and Evaluate the performance of Logistic Model
+```{r}
+# Make predictions:
+Pred_Logistic = predict(shark_logistic, data=shark_sparse)
+
+# Evaluate the performance:
+Logistic_Initial <- table(shark_sparse$deal, Pred_Logistic>0.5)
+
+# Baseline accuracy:
+BaseAcc_Logistic = sum(diag(Logistic_Initial))/sum(Logistic_Initial)
+BaseAcc_Logistic
+```
+
+
+As per the question, we have to now add a variable called as Ratio which will be derived using column askfor/valuation and then we have to run the models again to see after effect to check if the accuracy have improved in the models.
+
+#### Adding an  additional variable called as Ratio to the DTM which will be derived using column askfor/valuation
+```{r}
+# Addition of Ratio variable into shark_sparse
+shark_sparse$ratio = shark$askedFor/shark$valuation
+
+```
+ 
+Now, we have to re-run the model to check if any changes happen in the accuracy n performance
+
+#### CART with Ratio Column
+```{r}
+#CART Model
+shark_CART2 = rpart(deal ~ ., data=shark_sparse, method="class")
+
+#CART Diagram
+prp(shark_CART2, extra=2)
+```
+
+#### Predict and Evaluate the CART model using Ratio column
+```{r}
+# Evaluate the performance:
+pred_CART_After = predict(shark_CART2, data=shark_sparse, type="class")
+
+CART_After <- table(shark_sparse$deal, pred_CART_After)
+
+# Baseline accuracy:
+BaseAcc_CART2 = sum(diag(CART_After))/sum(CART_After)
+BaseAcc_CART2
+```
+
+#### Build Random Forest with Ratio Column
+```{r}
+# Random Forest Model
+shark_RF2 = randomForest(deal ~ ., data=shark_sparse)
+shark_RF2
+```
+
+#### Predict and Evaluate the RF model using Ratio column
+```{r}
+# Evaluate the performance:
+pred_RF_After = predict(shark_RF2, data=shark_sparse, type="class")
+
+RF_After <- table(shark_sparse$deal, pred_RF_After>0.5)
+
+# Baseline accuracy:
+BaseAcc_RF2 = sum(diag(RF_After))/sum(RF_After)
+BaseAcc_RF2
+```
+
+#### Variable Importance of Random Forest
+```{r}
+varImpPlot(shark_RF2,main='Variable Importance Plot: Shark Tank with Ratio',type=2)
+```
+We observer that along with previously mentioned important variables , ratio has become the most important variable for a deal and model building.
+
+#### Logistic Regression with Ratio Column
+```{r}
+#Logistic Model
+shark_logit2 = glm(deal~., data = shark_sparse)
+
+```
+
+#### Predict using Logistic Regression model
+```{r}
+# Make predictions:
+pred_Logit_After = predict(shark_logit2, data=shark_sparse)
+
+# Evaluate the performance of the Random Forest
+Logit_After <- table(shark_sparse$deal, pred_Logit_After>= 0.5)
+
+# Baseline accuracy
+BaseAcc_Logit2 = sum(diag(Logit_After))/sum(Logit_After)
+BaseAcc_Logit2
+```
+
+
+### Comparing all the 3 model with their performance - CART, Random Forest and Logistic regression
+```{r}
+
+df_fin =rbind(BaseAcc_CART,BaseAcc_CART2, BaseAcc_RF,BaseAcc_RF2,BaseAcc_Logistic, BaseAcc_Logit2)
+row.names(df_fin) = c('CART Accuracy', 'CART_Ratio Accuracy','RF Accuracy', 'RF_Ratio Accuracy','Logit Accuracy', 'Logit_Ratio Accuracy')
+
+#install.packages("kableExtra")
+library(kableExtra)
+print("Model Performance Comparison Metrics without splitting the data into train and test")
+kable(round(df_fin,3)) %>%
+  kable_styling(c("striped","bordered"))
+
+```
+
+#### Checking the same data after splitting, if some difference comes in accuracy
+```{r}
+shark_sparse$ratio= NULL
+```
+
+## BUILDING THE MODEL WITH SPLITTING THE DATA INTO TRAIN AND TEST SET:
+
+#### Split the data into Train and Test with having deal variable
+```{r}
+library(caTools)
+
+#set.seed(144)
+
+spl = sample.split(shark_sparse$deal, SplitRatio = 0.7)
+
+train = subset(shark_sparse, spl == TRUE)
+test = subset(shark_sparse, spl == FALSE)
+
+prop.table(table(train$deal))
+prop.table(table(test$deal))
+
+
+```
+
+
+#### Build CART Model
+```{r}
+# Load the Libraries
+library(rpart)
+library(rpart.plot)
+
+shark_CART = rpart(deal ~ ., data=train, method="class")
+
+#CART Diagram
+prp(shark_CART, extra=2)
+```
+
+#### Predict and Evaluate the Performance of CART
+```{r}
+Predict_CART = predict(shark_CART, newdata=test, type="class")
+
+CART_initial <- table(test$deal, Predict_CART)
+
+# Baseline accuracy
+BaseAcc_CART = sum(diag(CART_initial))/sum(CART_initial)
+BaseAcc_CART
+```
+
+#### Build Random Forest Model
+```{r}
+# Load Library
+library(randomForest)
+
+set.seed(123)
+
+shark_RF = randomForest(deal ~ ., data=train)
+shark_RF
+```
+
+#### Predict and Evaluate the Performance of Random Forest
+```{r}
+# Make predictions:
+Predict_RF = predict(shark_RF, newdata=test)
+
+# Evaluate the performance: 
+RF_Initial <- table(test$deal, Predict_RF>0.5)
+
+# Baseline accuracy:
+BaseAcc_RF = sum(diag(RF_Initial))/sum(RF_Initial)
+BaseAcc_RF
+```
+
+#### Variable Importance of Random Forest
+```{r}
+#Variable importance: 
+varImpPlot(shark_RF,main='Variable Importance Plot: Shark Tank',type=2)
+```
+
+
+#### Build Logistic Regression Model
+```{r}
+set.seed(123)
+
+shark_logistic = glm(deal~., data = train)
+```
+
+#### Predict and Evaluate the performance of Logistic Model
+```{r}
+# Make predictions:
+Pred_Logistic = predict(shark_logistic, newdata=test)
+
+# Evaluate the performance:
+Logistic_Initial <- table(test$deal, Pred_Logistic>0.5)
+
+# Baseline accuracy:
+BaseAcc_Logistic = sum(diag(Logistic_Initial))/sum(Logistic_Initial)
+BaseAcc_Logistic
+```
+
+#### Adding an  additional variable called as Ratio to the DTM which will be derived using column askfor/valuation
+```{r}
+# Addition of Ratio variable into shark_sparse
+shark_sparse$ratio = shark$askedFor/shark$valuation
+
+```
+ 
+#### Split the data into Train and Test with having deal and ratio variables
+```{r}
+library(caTools)
+
+#set.seed(144)
+
+spl = sample.split(shark_sparse$deal, SplitRatio = 0.7)
+
+train = subset(shark_sparse, spl == TRUE)
+test = subset(shark_sparse, spl == FALSE)
+
+prop.table(table(train$deal))
+prop.table(table(test$deal))
+
+
+```
+
+#### CART with Ratio Column
+```{r}
+#CART Model
+shark_CART2 = rpart(deal ~ ., data=train, method="class")
+
+#CART Diagram
+prp(shark_CART2, extra=2)
+```
+
+#### Predict and Evaluate the CART model using Ratio column
+```{r}
+
+# Evaluate the performance:
+pred_CART_After = predict(shark_CART2, newdata=test, type="class")
+
+CART_After <- table(test$deal, pred_CART_After)
+
+# Baseline accuracy:
+BaseAcc_CART2 = sum(diag(CART_After))/sum(CART_After)
+BaseAcc_CART2
+```
+
+#### Build Random Forest with Ratio Column
+```{r}
+# Random Forest Model
+shark_RF2 = randomForest(deal ~ ., data=train)
+shark_RF2
+```
+
+#### Predict and Evaluate the RF model using Ratio column
+```{r}
+# Evaluate the performance:
+pred_RF_After = predict(shark_RF2, newdata=test, type="class")
+
+RF_After <- table(test$deal, pred_RF_After>0.3)
+
+# Baseline accuracy:
+BaseAcc_RF2 = sum(diag(RF_After))/sum(RF_After)
+BaseAcc_RF2
+```
+
+#### Variable Importance of Random Forest
+```{r}
+varImpPlot(shark_RF2,main='Variable Importance Plot: Shark Tank with Ratio',type=2)
+```
+
+#### Logistic Regression with Ratio Column
+```{r}
+#Logistic Model
+shark_logit2 = glm(deal~., data = train)
+```
+
+#### Predict using the Logistic Regression Model
+```{r}
+# Make predictions:
+pred_Logit_After = predict(shark_logit2, newdata=test)
+
+# Evaluate the performance of the Random Forest
+Logit_After <- table(test$deal, pred_Logit_After>= 0.3)
+
+# Baseline accuracy
+BaseAcc_Logit2 = sum(diag(Logit_After))/sum(Logit_After)
+BaseAcc_Logit2
+```
+
+### Comparing all the 3 model with their performance - CART, Random Forest and Logistic regression
+```{r}
+
+df_fin =rbind(BaseAcc_CART,BaseAcc_CART2, BaseAcc_RF,BaseAcc_RF2,BaseAcc_Logistic, BaseAcc_Logit2)
+row.names(df_fin) = c('CART Accuracy', 'CART_Ratio Accuracy','RF Accuracy', 'RF_Ratio Accuracy','Logit Accuracy', 'Logit_Ratio Accuracy')
+
+#install.packages("kableExtra")
+library(kableExtra)
+print("Model Performance Comparison Metrics with splitting the data into train and test")
+kable(round(df_fin,3)) %>%
+  kable_styling(c("striped","bordered"))
+```
+
+## Conclusion:
+
+* We built various models like CART, RF and logistic on the text mining dataset with and without split
+
+### Without Split:
+
+We begin by model building on the whole dataset.The observations are as below:
+
+i) With CART Model we were able to predict around 65.7% and 66.1% accurate results using only description(Before) and description with ratio(After) respectively.
+
+ii) Using Random Forest, we were able to predict 55.4% and 55.8% accurate results using only description(Before) and description with ratio (After) respectively.
+
+iii) With Logistic regression, we were able to predict 99.8% and 100% accurate results with both parameters using only description(Before) and description with ratio (After)respectively.
+
+However,since we have not performed the train and test split ,the results might be because of  overfitting
+
+### With Split:
+
+Observations after data splitting:
+
+i) With CART Model we were able to predict around 50.7% and 60.1% accurate results using only description(Before) and description with ratio(After)respectively. 
+
+ii) Using Random Forest, we were able to predict 56.8% and 63.5% accurate results using only description(Before) and description with ratio(After) respectively.
+
+iii) With Logistic regression, we were able to predict 53.4% and 52% accurate results with both parameters using only description(Before) and description with ratio(After) respectively.
+
+* Observation 1:
+
+The accuracy has reduced after splitting the dataset into train and test, which clearly indicates that there was overfitting of data in the model without performing the split.
+
+* Observation 2:
+
+After the addition of the ratio variable we could see that the accuracy of model has increased with the data which is not splitted and also with the splitted data we could see that the accuracy has increased manily in CART and RF models , indicating the feature engineering has increased the performance of the model.
+
+* Observation 3 (Variable Importance):
+
+The "make", "design" and "shape" are some keywords associated with successful deals.This indicates tangible product deals.
+
+Products related to children, water , packages are the most sought after, for the deals to take place.
+
+ratio is one the imporatant factor for a deal.
+
+Using these insights, the entrepreneurs can customize their start-up's description to get a better deal rate.
+
+* NOTE
+
+With splitted data, further introduction of the combinations of parameters , tuning of  hyper parameters , validation with significant variables and removing unnecessary variables etc may help us to achieve higher accuracy.
